@@ -1,0 +1,397 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ======================
+// ENUMS
+// ======================
+
+enum UserRole {
+  ADMIN
+  PROCUREMENT_OFFICER
+  MANAGER
+  VENDOR
+}
+
+enum VendorStatus {
+  ACTIVE
+  INACTIVE
+  PENDING
+  BLOCKED
+}
+
+enum RFQStatus {
+  DRAFT
+  PUBLISHED
+  CLOSED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+}
+
+enum QuotationStatus {
+  DRAFT
+  SUBMITTED
+  SHORTLISTED
+  ACCEPTED
+  REJECTED
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum PurchaseOrderStatus {
+  DRAFT
+  APPROVED
+  SENT
+  COMPLETED
+  CANCELLED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  GENERATED
+  SENT
+  PAID
+  OVERDUE
+}
+
+enum NotificationType {
+  RFQ
+  APPROVAL
+  INVOICE
+  PURCHASE_ORDER
+  SYSTEM
+}
+
+// ======================
+// USERS
+// ======================
+
+model User {
+  id       String   @id @default(cuid())
+  name     String
+  email    String   @unique
+  password String
+  role     UserRole
+
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  vendorProfile Vendor?
+
+  rfqs      RFQ[]
+  approvals Approval[]
+
+  notifications Notification[]
+  activityLogs  ActivityLog[]
+}
+
+// ======================
+// VENDORS
+// ======================
+
+model Vendor {
+  id String @id @default(cuid())
+
+  companyName String
+  category    String
+
+  gstNumber String? @unique
+
+  contactPerson String
+  email         String @unique
+  phone         String
+
+  address String?
+
+  status VendorStatus @default(PENDING)
+
+  rating Float? @default(0)
+
+  userId String? @unique
+  user   User?   @relation(fields: [userId], references: [id])
+
+  quotations     Quotation[]
+  purchaseOrders PurchaseOrder[]
+
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  rfqvendors RFQVendor[]
+}
+
+// ======================
+// RFQ
+// ======================
+
+model RFQ {
+  id String @id @default(cuid())
+
+  rfqNumber   String @unique
+  title       String
+  description String
+
+  currency         String  @default("INR")
+  deliveryLocation String?
+
+  deadline DateTime
+
+  status RFQStatus @default(DRAFT)
+
+  createdById String
+  createdBy   User   @relation(fields: [createdById], references: [id])
+
+  items          RFQItem[]
+  vendors        RFQVendor[]
+  quotations     Quotation[]
+  approvals      Approval[]
+  attachments    Attachment[]
+  purchaseOrders PurchaseOrder[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ======================
+// RFQ ITEMS
+// ======================
+
+model RFQItem {
+  id String @id @default(cuid())
+
+  rfqId String
+  rfq   RFQ    @relation(fields: [rfqId], references: [id])
+
+  itemName    String
+  description String?
+
+  quantity Int
+  unit     String
+
+  estimatedCost Decimal? @db.Decimal(12, 2)
+
+  createdAt DateTime @default(now())
+}
+
+// ======================
+// RFQ VENDOR ASSIGNMENT
+// ======================
+
+model RFQVendor {
+  id String @id @default(cuid())
+
+  rfqId    String
+  vendorId String
+
+  rfq    RFQ    @relation(fields: [rfqId], references: [id])
+  vendor Vendor @relation(fields: [vendorId], references: [id])
+
+  invitedAt DateTime @default(now())
+
+  @@unique([rfqId, vendorId])
+}
+
+// ======================
+// QUOTATIONS
+// ======================
+
+model Quotation {
+  id String @id @default(cuid())
+
+  quotationNumber String @unique
+
+  rfqId    String
+  vendorId String
+
+  rfq    RFQ    @relation(fields: [rfqId], references: [id])
+  vendor Vendor @relation(fields: [vendorId], references: [id])
+
+  totalAmount Decimal @db.Decimal(12, 2)
+
+  deliveryDays     Int
+  deliveryDate     DateTime?
+  deliveryLocation String?
+  paymentTerms     String?
+  warranty         String?
+  validUntil       DateTime?
+  notes            String?
+
+  status QuotationStatus @default(DRAFT)
+
+  items QuotationItem[]
+
+  purchaseOrder PurchaseOrder?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([rfqId, vendorId])
+}
+
+// ======================
+// QUOTATION ITEMS
+// ======================
+
+model QuotationItem {
+  id String @id @default(cuid())
+
+  quotationId String
+  quotation   Quotation @relation(fields: [quotationId], references: [id])
+
+  itemName String
+
+  quantity Int
+
+  unitPrice  Decimal @db.Decimal(12, 2)
+  totalPrice Decimal @db.Decimal(12, 2)
+}
+
+// ======================
+// APPROVALS
+// ======================
+
+model Approval {
+  id String @id @default(cuid())
+
+  rfqId      String
+  approverId String
+
+  rfq      RFQ  @relation(fields: [rfqId], references: [id])
+  approver User @relation(fields: [approverId], references: [id])
+
+  level Int
+
+  remarks String?
+
+  status ApprovalStatus @default(PENDING)
+
+  actionAt DateTime?
+
+  createdAt DateTime @default(now())
+}
+
+// ======================
+// PURCHASE ORDERS
+// ======================
+
+model PurchaseOrder {
+  id String @id @default(cuid())
+
+  poNumber String @unique
+
+  rfqId       String
+  quotationId String @unique
+  vendorId    String
+
+  rfq RFQ @relation(fields: [rfqId], references: [id])
+
+  quotation Quotation @relation(fields: [quotationId], references: [id])
+
+  vendor Vendor @relation(fields: [vendorId], references: [id])
+
+  status PurchaseOrderStatus @default(DRAFT)
+
+  totalAmount Decimal @db.Decimal(12, 2)
+
+  invoice Invoice?
+
+  createdAt DateTime @default(now())
+}
+
+// ======================
+// INVOICES
+// ======================
+
+model Invoice {
+  id String @id @default(cuid())
+
+  invoiceNumber String @unique
+
+  purchaseOrderId String @unique
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
+
+  subTotal    Decimal @db.Decimal(12, 2)
+  cgst        Decimal @db.Decimal(12, 2)
+  sgst        Decimal @db.Decimal(12, 2)
+  totalAmount Decimal @db.Decimal(12, 2)
+
+  status InvoiceStatus @default(DRAFT)
+
+  dueDate DateTime?
+
+  paidAt DateTime?
+
+  createdAt DateTime @default(now())
+}
+
+// ======================
+// ATTACHMENTS
+// ======================
+
+model Attachment {
+  id String @id @default(cuid())
+
+  fileName String
+  fileUrl  String
+
+  rfqId String?
+
+  rfq RFQ? @relation(fields: [rfqId], references: [id])
+
+  uploadedAt DateTime @default(now())
+}
+
+// ======================
+// NOTIFICATIONS
+// ======================
+
+model Notification {
+  id String @id @default(cuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  title   String
+  message String
+
+  type NotificationType
+
+  isRead Boolean @default(false)
+
+  createdAt DateTime @default(now())
+}
+
+// ======================
+// ACTIVITY LOGS
+// ======================
+
+model ActivityLog {
+  id String @id @default(cuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  action String
+
+  entityType String
+  entityId   String
+
+  description String?
+
+  createdAt DateTime @default(now())
+}
