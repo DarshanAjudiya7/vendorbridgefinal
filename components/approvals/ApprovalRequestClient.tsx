@@ -80,7 +80,8 @@ export default function ApprovalRequestClient({
       subtitle: rfq.createdBy.name, 
       date: format(new Date(rfq.createdAt), 'dd MMM yyyy, hh:mm a'),
       status: 'COMPLETED',
-      role: 'Procurement Officer'
+      role: 'Procurement Officer',
+      isCurrent: false
     },
     ...allApprovals.map(app => ({
       title: `Level ${app.level} Approval`,
@@ -95,7 +96,8 @@ export default function ApprovalRequestClient({
       subtitle: 'System',
       date: null,
       status: allApprovals.every(a => a.status === 'APPROVED') ? 'COMPLETED' : 'WAITING',
-      role: 'System'
+      role: 'System',
+      isCurrent: false
     }
   ];
 
@@ -262,8 +264,8 @@ export default function ApprovalRequestClient({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {rfq.items.map((item, idx) => {
-                      const qItem = quotation?.items?.find(qi => qi.itemName === item.itemName);
+                    {rfq.items.map((item: any, idx: number) => {
+                      const qItem = quotation?.items?.find((qi: any) => qi.itemName === item.itemName);
                       return (
                         <tr key={item.id} className="bg-white">
                           <td className="px-4 py-3 text-gray-500">{idx + 1}</td>

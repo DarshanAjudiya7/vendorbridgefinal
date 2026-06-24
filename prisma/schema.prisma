@@ -333,6 +333,12 @@ model Invoice {
 
   status InvoiceStatus @default(DRAFT)
 
+  billingTo    String?
+  currency     String? @default("INR")
+  paymentTerms String?
+  notes        String?
+  attachments  Attachment[]
+
   dueDate DateTime?
 
   paidAt DateTime?
@@ -351,8 +357,10 @@ model Attachment {
   fileUrl  String
 
   rfqId String?
-
   rfq RFQ? @relation(fields: [rfqId], references: [id])
+
+  invoiceId String?
+  invoice   Invoice? @relation(fields: [invoiceId], references: [id])
 
   uploadedAt DateTime @default(now())
 }

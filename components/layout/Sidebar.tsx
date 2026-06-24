@@ -39,9 +39,36 @@ const navigation = [
   { name: 'Quotations', href: '/dashboard/quotations', icon: ArrowLeftRight },
   { name: 'Comparison', href: '/dashboard/comparison', icon: Target },
   { name: 'Approvals', href: '/dashboard/approvals', icon: CheckSquare },
-  { name: 'PO & Invoices', href: '#', icon: FileSpreadsheet },
-  { name: 'Logs', href: '#', icon: Activity },
-  { name: 'Reports', href: '#', icon: PieChart },
+  { 
+    name: 'PO & Invoices', 
+    href: '/dashboard/po-invoices', 
+    icon: FileSpreadsheet,
+    subItems: [
+      { name: 'Purchase Orders', href: '/dashboard/po-invoices/purchase-orders' },
+      { name: 'Invoices', href: '/dashboard/po-invoices/invoices' },
+    ]
+  },
+  { 
+    name: 'Activity', 
+    href: '/dashboard/activity', 
+    icon: Activity,
+    subItems: [
+      { name: 'Notifications', href: '/dashboard/activity/notifications' },
+      { name: 'Activity Logs', href: '/dashboard/activity/logs' },
+    ]
+  },
+  { 
+    name: 'Reports', 
+    href: '/dashboard/reports', 
+    icon: PieChart,
+    subItems: [
+      { name: 'Overview', href: '/dashboard/reports/overview' },
+      { name: 'Vendor Performance', href: '/dashboard/reports/vendor-performance' },
+      { name: 'Spend Analysis', href: '/dashboard/reports/spend-analysis' },
+      { name: 'Procurement Trends', href: '/dashboard/reports/procurement-trends' },
+      { name: 'Reports Library', href: '/dashboard/reports/library' },
+    ]
+  },
   { name: 'Settings', href: '/dashboard/settings', icon: Hexagon },
 ];
 
@@ -51,6 +78,9 @@ export default function Sidebar() {
   const pathname = usePathname();
   
   const [rfqExpanded, setRfqExpanded] = useState(true);
+  const [poExpanded, setPoExpanded] = useState(true);
+  const [activityExpanded, setActivityExpanded] = useState(true);
+  const [reportsExpanded, setReportsExpanded] = useState(true);
 
   const handleLogout = async () => {
     await signOut({ callbackUrl: '/login' });
@@ -96,23 +126,35 @@ export default function Sidebar() {
             const Icon = item.icon;
             
             if (item.subItems) {
-              const isSectionActive = pathname.startsWith('/dashboard/rfqs');
+              const isRfq = item.name === 'RFQs';
+              const isPo = item.name === 'PO & Invoices';
+              const isActivity = item.name === 'Activity';
+              const isReports = item.name === 'Reports';
+              const isSectionActive = pathname.startsWith(item.href);
+              const isExpanded = isRfq ? rfqExpanded : (isPo ? poExpanded : (isActivity ? activityExpanded : (isReports ? reportsExpanded : false)));
+              const toggleExpanded = () => {
+                if (isRfq) setRfqExpanded(!rfqExpanded);
+                if (isPo) setPoExpanded(!poExpanded);
+                if (isActivity) setActivityExpanded(!activityExpanded);
+                if (isReports) setReportsExpanded(!reportsExpanded);
+              };
+
               return (
                 <div key={item.name} className="mb-2">
                   <button
-                    onClick={() => setRfqExpanded(!rfqExpanded)}
+                    onClick={toggleExpanded}
                     className={`w-full group flex items-center justify-between rounded-xl px-4 py-3 text-sm font-medium transition-colors ${
-                      isSectionActive && !rfqExpanded ? 'bg-emerald-600/10 text-emerald-400' : 'hover:bg-white/5 text-slate-300 hover:text-white'
+                      isSectionActive && !isExpanded ? 'bg-emerald-600/10 text-emerald-400' : 'hover:bg-white/5 text-slate-300 hover:text-white'
                     }`}
                   >
                     <div className="flex items-center gap-3">
                       <Icon size={18} className={isSectionActive ? 'text-emerald-400' : 'text-slate-400 group-hover:text-white'} />
                       {item.name}
                     </div>
-                    {rfqExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                    {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                   </button>
                   
-                  {rfqExpanded && (
+                  {isExpanded && (
                     <div className="mt-1 ml-4 space-y-1 border-l border-white/10 pl-3">
                       {item.subItems.map(subItem => {
                         const isSubActive = pathname === subItem.href;
