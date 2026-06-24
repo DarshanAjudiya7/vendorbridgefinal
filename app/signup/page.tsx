@@ -17,6 +17,9 @@ export default function SignupPage() {
     companyName: "",
   });
   
+  const [profileImage, setProfileImage] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState("");
@@ -25,6 +28,18 @@ export default function SignupPage() {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setProfileImage(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImagePreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const calculatePasswordStrength = (password: string) => {
@@ -55,6 +70,25 @@ export default function SignupPage() {
     }
 
     try {
+      let uploadedImageUrl = null;
+
+      if (profileImage) {
+        const formData = new FormData();
+        formData.append("file", profileImage);
+        
+        const uploadRes = await fetch("/api/upload", {
+          method: "POST",
+          body: formData,
+        });
+        
+        if (uploadRes.ok) {
+          const uploadData = await uploadRes.json();
+          uploadedImageUrl = uploadData.url;
+        } else {
+          console.error("Failed to upload image");
+        }
+      }
+
       const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -64,6 +98,7 @@ export default function SignupPage() {
           password: formData.password,
           role: formData.role,
           companyName: formData.companyName,
+          image: uploadedImageUrl,
         }),
       });
 
@@ -116,31 +151,6 @@ export default function SignupPage() {
       </div>
 
       <div className="w-full max-w-3xl bg-white rounded-2xl shadow-sm border border-gray-100 p-8 sm:p-12">
-        {/* Step Indicator */}
-        <div className="mb-12">
-          <div className="flex items-center justify-between relative">
-            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-full h-0.5 bg-gray-100 z-0"></div>
-            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1/3 h-0.5 bg-emerald-500 z-0"></div>
-            
-            <div className="relative z-10 flex flex-col items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center font-semibold text-sm">1</div>
-              <span className="text-xs font-medium text-emerald-600">Account Info</span>
-            </div>
-            <div className="relative z-10 flex flex-col items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-white border-2 border-gray-200 text-gray-400 flex items-center justify-center font-semibold text-sm">2</div>
-              <span className="text-xs font-medium text-gray-400">Organization</span>
-            </div>
-            <div className="relative z-10 flex flex-col items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-white border-2 border-gray-200 text-gray-400 flex items-center justify-center font-semibold text-sm">3</div>
-              <span className="text-xs font-medium text-gray-400">Details</span>
-            </div>
-            <div className="relative z-10 flex flex-col items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-white border-2 border-gray-200 text-gray-400 flex items-center justify-center font-semibold text-sm">4</div>
-              <span className="text-xs font-medium text-gray-400">Confirmation</span>
-            </div>
-          </div>
-        </div>
-
         <div className="mb-8">
           <h2 className="text-3xl font-bold tracking-tight text-gray-900">Create Your Account</h2>
           <p className="mt-2 text-sm text-gray-500">Join Vendor Bridge and streamline your procurement process</p>
@@ -153,6 +163,27 @@ export default function SignupPage() {
         )}
 
         <form onSubmit={handleSignup} className="space-y-6">
+          <div className="flex justify-center mb-6">
+            <div className="relative group cursor-pointer">
+              <input 
+                type="file" 
+                accept="image/*" 
+                onChange={handleImageChange}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+              />
+              <div className="w-24 h-24 rounded-full border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden bg-gray-50 group-hover:border-emerald-500 transition-colors">
+                {imagePreview ? (
+                  <img src={imagePreview} alt="Profile" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="flex flex-col items-center text-gray-400">
+                    <UserIcon size={32} />
+                    <span className="text-[10px] mt-1 font-medium">Add Photo</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-medium text-gray-700">Full Name</label>

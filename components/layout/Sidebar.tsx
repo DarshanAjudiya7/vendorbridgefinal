@@ -16,7 +16,8 @@ import {
   X,
   LogOut,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  Target
 } from 'lucide-react';
 import { useSidebar } from './SidebarContext';
 import { signOut } from 'next-auth/react';
@@ -35,11 +36,13 @@ const navigation = [
       { name: 'RFQ Templates', href: '/dashboard/rfqs/templates' },
     ]
   },
-  { name: 'Quotations', href: '#', icon: ArrowLeftRight },
-  { name: 'Approvals', href: '#', icon: CheckSquare },
+  { name: 'Quotations', href: '/dashboard/quotations', icon: ArrowLeftRight },
+  { name: 'Comparison', href: '/dashboard/comparison', icon: Target },
+  { name: 'Approvals', href: '/dashboard/approvals', icon: CheckSquare },
   { name: 'PO & Invoices', href: '#', icon: FileSpreadsheet },
   { name: 'Logs', href: '#', icon: Activity },
   { name: 'Reports', href: '#', icon: PieChart },
+  { name: 'Settings', href: '/dashboard/settings', icon: Hexagon },
 ];
 
 export default function Sidebar() {
@@ -56,6 +59,7 @@ export default function Sidebar() {
   const userName = session?.user?.name || 'Guest User';
   const userRole = (session?.user as any)?.role === 'PROCUREMENT_OFFICER' ? 'Procurement Officer' : (session?.user as any)?.role || 'Guest';
   const userInitial = userName.charAt(0);
+  const userImage = session?.user?.image;
 
   return (
     <>
@@ -156,15 +160,19 @@ export default function Sidebar() {
         {/* User Profile */}
         <div className="border-t border-white/10 bg-[#081021] p-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-600 font-bold text-white shadow-lg">
-                {userInitial}
-              </div>
+            <Link href="/dashboard/settings" className="flex items-center gap-3 group">
+              {userImage ? (
+                <img src={userImage} alt={userName} className="h-10 w-10 rounded-full object-cover border-2 border-transparent group-hover:border-emerald-500 transition-colors" />
+              ) : (
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-600 font-bold text-white shadow-lg group-hover:bg-emerald-500 transition-colors">
+                  {userInitial}
+                </div>
+              )}
               <div>
-                <p className="text-sm font-medium text-white">{userName}</p>
+                <p className="text-sm font-medium text-white group-hover:text-emerald-400 transition-colors">{userName}</p>
                 <p className="text-xs font-medium text-emerald-400">{userRole}</p>
               </div>
-            </div>
+            </Link>
             <button onClick={handleLogout} className="rounded-lg p-2 text-slate-400 hover:bg-white/5 hover:text-white transition-colors" title="Logout">
               <LogOut size={18} />
             </button>

@@ -1,9 +1,30 @@
 "use client";
 import { Menu, Search, Bell } from 'lucide-react';
 import { useSidebar } from './SidebarContext';
+import { useSession } from 'next-auth/react';
+import { useState, useEffect } from 'react';
 
 export default function Header() {
   const { setIsOpen } = useSidebar();
+
+  const { data: session } = useSession();
+  const [notificationCount, setNotificationCount] = useState(0);
+
+  useEffect(() => {
+    if (session?.user) {
+      fetch('/api/notifications/count')
+        .then(res => res.json())
+        .then(data => {
+          if (data.count !== undefined) {
+            setNotificationCount(data.count);
+          }
+        })
+        .catch(console.error);
+    }
+  }, [session]);
+
+  const userImage = session?.user?.image;
+  const userName = session?.user?.name || 'User';
 
   return (
     <header className="flex h-16 items-center justify-between border-b border-gray-200 bg-white px-6 lg:px-8">
@@ -40,9 +61,11 @@ export default function Header() {
           <button type="button" className="-m-2.5 p-2.5 text-gray-400 hover:text-gray-500 relative">
             <span className="sr-only">View notifications</span>
             <Bell className="h-6 w-6" aria-hidden="true" />
-            <span className="absolute top-2 right-2 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-medium text-white ring-2 ring-white">
-              12
-            </span>
+            {notificationCount > 0 && (
+              <span className="absolute top-2 right-2 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-medium text-white ring-2 ring-white">
+                {notificationCount}
+              </span>
+            )}
           </button>
 
           {/* Separator */}
@@ -52,11 +75,17 @@ export default function Header() {
           <div className="relative">
             <button type="button" className="-m-1.5 flex items-center p-1.5">
               <span className="sr-only">Open user menu</span>
-              <img
-                className="h-8 w-8 rounded-full bg-gray-50 object-cover"
-                src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?ixlib=rb-1.2.1&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80"
-                alt=""
-              />
+              {userImage ? (
+                <img
+                  className="h-8 w-8 rounded-full bg-gray-50 object-cover"
+                  src={userImage}
+                  alt={userName}
+                />
+              ) : (
+                <div className="h-8 w-8 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center font-bold text-sm uppercase">
+                  {userName.charAt(0)}
+                </div>
+              )}
             </button>
           </div>
         </div>

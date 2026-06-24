@@ -5,8 +5,7 @@ import { UserRole } from "@prisma/client";
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const { name, email, password, role, companyName } = body;
+    const { name, email, password, role, companyName, image } = await req.json();
 
     if (!name || !email || !password || !role) {
       return NextResponse.json({ message: "Missing required fields" }, { status: 400 });
@@ -34,6 +33,7 @@ export async function POST(req: NextRequest) {
         email,
         password: hashedPassword,
         role: userRole,
+        image: image || null,
       },
     });
 
