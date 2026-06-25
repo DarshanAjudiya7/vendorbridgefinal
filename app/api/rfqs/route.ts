@@ -11,10 +11,15 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
+    const role = (session.user as any).role;
+    if (role !== "PROCUREMENT_OFFICER") {
+      return NextResponse.json({ message: "Forbidden: Only Procurement Officers can create RFQs" }, { status: 403 });
+    }
+
     const userId = (session.user as any).id;
 
     const body = await req.json();
-    const { title, description, deadline, currency, deliveryLocation, status, items, vendorIds } = body;
+    const { title, description, deadline, currency, deliveryLocation, status, items, vendorIds, attachments } = body;
 
     if (!title || !deadline) {
       return NextResponse.json({ message: "Missing required fields" }, { status: 400 });
@@ -58,9 +63,40 @@ export async function POST(req: Request) {
             create: (vendorIds || []).map((vendorId: string) => ({
               vendorId
             }))
+          },
+          // Create attachments
+          attachments: {
+            create: (attachments || []).map((a: any) => ({
+              fileName: a.name,
+              fileUrl: a.url
+            }))
           }
         }
       });
+
+      // If published, notify assigned vendors
+      if (status === 'PUBLISHED' && vendorIds && vendorIds.length > 0) {
+        // Find vendors to get their user IDs
+        const vendorsWithUsers = await tx.vendor.findMany({
+          where: {
+            id: { in: vendorIds },
+            userId: { not: null }
+          }
+        });
+
+        const notificationsToCreate = vendorsWithUsers.map(v => ({
+          userId: v.userId as string,
+          title: 'New RFQ Assigned',
+          message: `You have been assigned to ${rfqNumber}: ${title}. Please review and submit your quotation before the deadline.`,
+          type: 'RFQ' as const,
+        }));
+
+        if (notificationsToCreate.length > 0) {
+          await tx.notification.createMany({
+            data: notificationsToCreate
+          });
+        }
+      }
 
       return rfq;
     });

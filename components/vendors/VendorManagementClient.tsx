@@ -17,8 +17,11 @@ import {
   ChevronLeft,
   ChevronRight,
   ArrowUp,
-  ArrowDown
+  ArrowDown,
+  Check,
+  X
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 
 type Trend = { value: number; isPositive: boolean };
 
@@ -36,14 +39,31 @@ type Metrics = {
 type Props = {
   initialVendors: Vendor[];
   metrics: Metrics;
+  userRole?: string;
 };
 
-export default function VendorManagementClient({ initialVendors, metrics }: Props) {
+export default function VendorManagementClient({ initialVendors, metrics, userRole }: Props) {
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [categoryFilter, setCategoryFilter] = useState('All');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
+
+  // Add/Edit/View Vendor State
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [viewVendor, setViewVendor] = useState<any>(null);
+  const [editVendor, setEditVendor] = useState<any>(null);
+  const [newVendor, setNewVendor] = useState({
+    companyName: '',
+    category: 'General',
+    gstNumber: '',
+    contactPerson: '',
+    email: '',
+    phone: '',
+    address: ''
+  });
 
   // Derive unique categories from the data for the filter dropdown
   const categories = ['All', ...Array.from(new Set(initialVendors.map(v => v.category)))];
@@ -68,6 +88,80 @@ export default function VendorManagementClient({ initialVendors, metrics }: Prop
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage
   );
+
+  const handleStatusChange = async (vendorId: string, status: string) => {
+    try {
+      const res = await fetch(`/api/vendors/${vendorId}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status })
+      });
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || 'Failed to update status');
+      }
+      router.refresh();
+    } catch (error: any) {
+      console.error(error);
+      alert(error.message || 'Failed to update vendor status');
+    }
+  };
+
+  const handleAddVendor = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    try {
+      const res = await fetch('/api/vendors', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newVendor)
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || 'Failed to add vendor');
+      }
+      setIsModalOpen(false);
+      setNewVendor({
+        companyName: '',
+        category: 'General',
+        gstNumber: '',
+        contactPerson: '',
+        email: '',
+        phone: '',
+        address: ''
+      });
+      router.refresh();
+    } catch (error: any) {
+      console.error(error);
+      alert(error.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleEditVendor = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editVendor) return;
+    setIsSubmitting(true);
+    try {
+      const res = await fetch(`/api/vendors/${editVendor.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editVendor)
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || 'Failed to edit vendor');
+      }
+      setEditVendor(null);
+      router.refresh();
+    } catch (error: any) {
+      console.error(error);
+      alert(error.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const getCategoryColor = (category: string) => {
     const hash = category.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
@@ -126,9 +220,14 @@ export default function VendorManagementClient({ initialVendors, metrics }: Prop
           <h1 className="text-2xl font-bold tracking-tight text-gray-900">Vendors</h1>
           <p className="text-sm text-gray-500 mt-1">Home &gt; Vendors</p>
         </div>
-        <button className="flex items-center gap-2 rounded-lg bg-[#0F8C58] px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-emerald-700">
-          <Plus size={16} /> Add Vendor <ChevronDown size={16} className="ml-1" />
-        </button>
+        {userRole === 'ADMIN' && (
+          <button 
+            onClick={() => setIsModalOpen(true)}
+            className="flex items-center gap-2 rounded-lg bg-[#0F8C58] px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-emerald-700 transition-colors"
+          >
+            <Plus size={16} /> Add Vendor <ChevronDown size={16} className="ml-1" />
+          </button>
+        )}
       </div>
 
       {/* Metrics Row */}
@@ -268,15 +367,49 @@ export default function VendorManagementClient({ initialVendors, metrics }: Prop
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-2">
-                        <button className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors border border-gray-200">
+                        {userRole === 'ADMIN' && (
+                          <>
+                            {vendor.status !== 'ACTIVE' && (
+                              <button 
+                                onClick={() => handleStatusChange(vendor.id, 'ACTIVE')}
+                                title="Approve Vendor"
+                                className="rounded p-1.5 text-[#0F8C58] hover:bg-emerald-50 transition-colors border border-emerald-200"
+                              >
+                                <Check size={16} />
+                              </button>
+                            )}
+                            {vendor.status !== 'REJECTED' && (
+                              <button 
+                                onClick={() => handleStatusChange(vendor.id, 'REJECTED')}
+                                title="Reject/Block Vendor"
+                                className="rounded p-1.5 text-red-600 hover:bg-red-50 transition-colors border border-red-200"
+                              >
+                                <X size={16} />
+                              </button>
+                            )}
+                          </>
+                        )}
+                        <button 
+                          onClick={() => setViewVendor(vendor)}
+                          title="View Details"
+                          className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors border border-gray-200"
+                        >
                           <Eye size={16} />
                         </button>
-                        <button className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors border border-gray-200">
-                          <Edit2 size={16} />
-                        </button>
-                        <button className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors border border-gray-200">
-                          <MoreVertical size={16} />
-                        </button>
+                        {userRole === 'ADMIN' && (
+                          <>
+                            <button 
+                              onClick={() => setEditVendor(vendor)}
+                              title="Edit Vendor"
+                              className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors border border-gray-200"
+                            >
+                              <Edit2 size={16} />
+                            </button>
+                            <button className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors border border-gray-200">
+                              <MoreVertical size={16} />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -338,6 +471,286 @@ export default function VendorManagementClient({ initialVendors, metrics }: Prop
           </div>
         </div>
       </div>
+
+      {/* Add Vendor Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-6 border-b border-gray-100">
+              <h2 className="text-xl font-bold text-gray-900">Add New Vendor</h2>
+              <button 
+                onClick={() => setIsModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <form onSubmit={handleAddVendor} className="p-6 space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Company Name *</label>
+                  <input 
+                    required
+                    type="text" 
+                    value={newVendor.companyName}
+                    onChange={(e) => setNewVendor({...newVendor, companyName: e.target.value})}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Category *</label>
+                  <input 
+                    required
+                    type="text" 
+                    value={newVendor.category}
+                    onChange={(e) => setNewVendor({...newVendor, category: e.target.value})}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">GST Number</label>
+                  <input 
+                    type="text" 
+                    value={newVendor.gstNumber}
+                    onChange={(e) => setNewVendor({...newVendor, gstNumber: e.target.value})}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Contact Person *</label>
+                  <input 
+                    required
+                    type="text" 
+                    value={newVendor.contactPerson}
+                    onChange={(e) => setNewVendor({...newVendor, contactPerson: e.target.value})}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Email Address *</label>
+                  <input 
+                    required
+                    type="email" 
+                    value={newVendor.email}
+                    onChange={(e) => setNewVendor({...newVendor, email: e.target.value})}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number *</label>
+                  <input 
+                    required
+                    type="text" 
+                    value={newVendor.phone}
+                    onChange={(e) => setNewVendor({...newVendor, phone: e.target.value})}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Full Address</label>
+                  <textarea 
+                    rows={3}
+                    value={newVendor.address}
+                    onChange={(e) => setNewVendor({...newVendor, address: e.target.value})}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100">
+                <button 
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="px-4 py-2 text-sm font-medium text-white bg-[#0F8C58] rounded-lg hover:bg-emerald-700 disabled:opacity-70"
+                >
+                  {isSubmitting ? 'Saving...' : 'Save Vendor'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* View Vendor Modal */}
+      {viewVendor && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-6 border-b border-gray-100">
+              <h2 className="text-xl font-bold text-gray-900">Vendor Details</h2>
+              <button 
+                onClick={() => setViewVendor(null)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <p className="text-sm text-gray-500 mb-1">Company Name</p>
+                  <p className="font-medium text-gray-900">{viewVendor.companyName}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500 mb-1">Category</p>
+                  <p className="font-medium text-gray-900">{viewVendor.category}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500 mb-1">Status</p>
+                  <p className="font-medium text-gray-900">{viewVendor.status}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500 mb-1">GST Number</p>
+                  <p className="font-medium text-gray-900">{viewVendor.gstNumber || 'N/A'}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500 mb-1">Contact Person</p>
+                  <p className="font-medium text-gray-900">{viewVendor.contactPerson}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500 mb-1">Email</p>
+                  <p className="font-medium text-gray-900">{viewVendor.email}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500 mb-1">Phone</p>
+                  <p className="font-medium text-gray-900">{viewVendor.phone}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500 mb-1">Registered At</p>
+                  <p className="font-medium text-gray-900">{new Date(viewVendor.createdAt).toLocaleString()}</p>
+                </div>
+                <div className="md:col-span-2">
+                  <p className="text-sm text-gray-500 mb-1">Address</p>
+                  <p className="font-medium text-gray-900">{viewVendor.address || 'N/A'}</p>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-100">
+              <button 
+                onClick={() => setViewVendor(null)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Vendor Modal */}
+      {editVendor && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-6 border-b border-gray-100">
+              <h2 className="text-xl font-bold text-gray-900">Edit Vendor</h2>
+              <button 
+                onClick={() => setEditVendor(null)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <form onSubmit={handleEditVendor} className="p-6 space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Company Name *</label>
+                  <input 
+                    required
+                    type="text" 
+                    value={editVendor.companyName}
+                    onChange={(e) => setEditVendor({...editVendor, companyName: e.target.value})}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Category *</label>
+                  <input 
+                    required
+                    type="text" 
+                    value={editVendor.category}
+                    onChange={(e) => setEditVendor({...editVendor, category: e.target.value})}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">GST Number</label>
+                  <input 
+                    type="text" 
+                    value={editVendor.gstNumber || ''}
+                    onChange={(e) => setEditVendor({...editVendor, gstNumber: e.target.value})}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Contact Person *</label>
+                  <input 
+                    required
+                    type="text" 
+                    value={editVendor.contactPerson}
+                    onChange={(e) => setEditVendor({...editVendor, contactPerson: e.target.value})}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Email Address *</label>
+                  <input 
+                    required
+                    type="email" 
+                    value={editVendor.email}
+                    onChange={(e) => setEditVendor({...editVendor, email: e.target.value})}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number *</label>
+                  <input 
+                    required
+                    type="text" 
+                    value={editVendor.phone}
+                    onChange={(e) => setEditVendor({...editVendor, phone: e.target.value})}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Full Address</label>
+                  <textarea 
+                    rows={3}
+                    value={editVendor.address || ''}
+                    onChange={(e) => setEditVendor({...editVendor, address: e.target.value})}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100">
+                <button 
+                  type="button"
+                  onClick={() => setEditVendor(null)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="px-4 py-2 text-sm font-medium text-white bg-[#0F8C58] rounded-lg hover:bg-emerald-700 disabled:opacity-70"
+                >
+                  {isSubmitting ? 'Saving...' : 'Update Vendor'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </>
   );
 }

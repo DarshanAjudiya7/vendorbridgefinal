@@ -1,9 +1,14 @@
 import { prisma } from '@/lib/prisma';
 import VendorManagementClient from '@/components/vendors/VendorManagementClient';
 
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+
 export const revalidate = 0; // dynamic
 
 export default async function VendorsPage() {
+  const session = await getServerSession(authOptions);
+  
   const vendors = await prisma.vendor.findMany({
     orderBy: { createdAt: 'desc' },
   });
@@ -26,6 +31,10 @@ export default async function VendorsPage() {
   };
 
   return (
-    <VendorManagementClient initialVendors={vendors} metrics={metrics} />
+    <VendorManagementClient 
+      initialVendors={vendors} 
+      metrics={metrics} 
+      userRole={(session?.user as any)?.role} 
+    />
   );
 }

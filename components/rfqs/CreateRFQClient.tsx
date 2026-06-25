@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   Check,
@@ -22,6 +22,7 @@ type Vendor = {
 
 type Props = {
   activeVendors: Vendor[];
+  initialData?: any;
 };
 
 type RFQItem = {
@@ -33,7 +34,7 @@ type RFQItem = {
   price: number;
 };
 
-export default function CreateRFQClient({ activeVendors }: Props) {
+export default function CreateRFQClient({ activeVendors, initialData }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [saveDraftLoading, setSaveDraftLoading] = useState(false);
@@ -52,6 +53,51 @@ export default function CreateRFQClient({ activeVendors }: Props) {
   const [selectedVendors, setSelectedVendors] = useState<Vendor[]>([]);
   const [vendorSearch, setVendorSearch] = useState('');
   const [isVendorDropdownOpen, setIsVendorDropdownOpen] = useState(false);
+
+  const [attachments, setAttachments] = useState<{name: string, url: string}[]>([]);
+  const [uploadingFile, setUploadingFile] = useState(false);
+
+  // Load initialData if present
+  useEffect(() => {
+    if (initialData) {
+      setTitle(initialData.title || '');
+      setDescription(initialData.description || '');
+      
+      if (initialData.deadline) {
+        // Format ISO string to datetime-local format (YYYY-MM-DDThh:mm)
+        const date = new Date(initialData.deadline);
+        const tzOffset = date.getTimezoneOffset() * 60000; // offset in milliseconds
+        const localISOTime = (new Date(date.getTime() - tzOffset)).toISOString().slice(0, 16);
+        setDeadline(localISOTime);
+      }
+      
+      setCurrency(initialData.currency || 'INR');
+      setDeliveryLocation(initialData.deliveryLocation || '');
+
+      if (initialData.items && initialData.items.length > 0) {
+        setItems(initialData.items.map((item: any) => ({
+          id: item.id,
+          name: item.itemName,
+          description: item.description || '',
+          unit: item.unit,
+          quantity: item.quantity,
+          price: Number(item.estimatedCost) || 0
+        })));
+      }
+
+      if (initialData.vendors && initialData.vendors.length > 0) {
+        const preSelected = initialData.vendors.map((v: any) => v.vendor);
+        setSelectedVendors(preSelected);
+      }
+
+      if (initialData.attachments && initialData.attachments.length > 0) {
+        setAttachments(initialData.attachments.map((a: any) => ({
+          name: a.fileName,
+          url: a.fileUrl
+        })));
+      }
+    }
+  }, [initialData]);
 
   // Calculations
   const totalItems = items.reduce((acc, item) => acc + (Number(item.quantity) || 0), 0);
@@ -82,6 +128,38 @@ export default function CreateRFQClient({ activeVendors }: Props) {
     }
   };
 
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) return;
+    
+    setUploadingFile(true);
+    try {
+      const file = e.target.files[0];
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) throw new Error("Upload failed");
+      const data = await res.json();
+      
+      setAttachments([...attachments, { name: file.name, url: data.url }]);
+    } catch (error) {
+      console.error(error);
+      alert("Failed to upload file");
+    } finally {
+      setUploadingFile(false);
+      // Reset the input
+      e.target.value = '';
+    }
+  };
+
+  const removeAttachment = (index: number) => {
+    setAttachments(attachments.filter((_, i) => i !== index));
+  };
+
   const handleSubmit = async (status: 'DRAFT' | 'PUBLISHED') => {
     if (!title) {
       alert("Please enter an RFQ Title");
@@ -92,8 +170,12 @@ export default function CreateRFQClient({ activeVendors }: Props) {
     else setSaveDraftLoading(true);
 
     try {
-      const res = await fetch('/api/rfqs', {
-        method: 'POST',
+      const isEdit = !!initialData;
+      const endpoint = isEdit ? `/api/rfqs/${initialData.id}` : '/api/rfqs';
+      const method = isEdit ? 'PUT' : 'POST';
+
+      const res = await fetch(endpoint, {
+        method: method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           title,
@@ -109,7 +191,8 @@ export default function CreateRFQClient({ activeVendors }: Props) {
             quantity: Number(i.quantity),
             price: Number(i.price)
           })),
-          vendorIds: selectedVendors.map(v => v.id)
+          vendorIds: selectedVendors.map(v => v.id),
+          attachments: attachments
         })
       });
 
@@ -140,7 +223,7 @@ export default function CreateRFQClient({ activeVendors }: Props) {
               <span className="mx-2">&gt;</span>
               <span className="text-gray-900 font-medium">Create RFQ</span>
             </div>
-            <h1 className="text-2xl font-bold text-gray-900">Create New RFQ</h1>
+            <h1 className="text-2xl font-bold text-gray-900">{initialData ? 'Edit RFQ' : 'Create New RFQ'}</h1>
             <p className="text-sm text-gray-500 mt-1">Fill in the details below to create a new Request for Quotation</p>
           </div>
           <div className="flex items-center gap-3">
@@ -196,6 +279,7 @@ export default function CreateRFQClient({ activeVendors }: Props) {
               <input
                 type="text"
                 disabled
+                value={initialData?.rfqNumber || ''}
                 placeholder="Auto generated"
                 className="w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm text-gray-500 cursor-not-allowed"
               />
@@ -400,17 +484,41 @@ export default function CreateRFQClient({ activeVendors }: Props) {
             <h2 className="text-lg font-bold text-gray-900">Attachments</h2>
           </div>
 
-          <div className="border-2 border-dashed border-emerald-200 bg-emerald-50/50 rounded-xl p-10 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-emerald-50 transition-colors">
+          <label className="border-2 border-dashed border-emerald-200 bg-emerald-50/50 rounded-xl p-10 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-emerald-50 transition-colors relative">
+            <input 
+              type="file" 
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" 
+              onChange={handleFileUpload}
+              disabled={uploadingFile}
+            />
             <div className="h-12 w-12 rounded-full bg-emerald-100 flex items-center justify-center text-[#0F8C58] mb-4">
               <UploadCloud size={24} />
             </div>
             <p className="text-sm font-medium text-gray-700 mb-1">
-              Drag & drop files here or <span className="text-[#0F8C58]">click to browse</span>
+              {uploadingFile ? "Uploading..." : <><span className="text-[#0F8C58]">Click to browse</span> or drag & drop files here</>}
             </p>
             <p className="text-xs text-gray-500">
               Supports: PDF, DOC, DOCX, XLS, XLSX, JPG, PNG (Max 10MB each)
             </p>
-          </div>
+          </label>
+
+          {attachments.length > 0 && (
+            <div className="mt-4 space-y-2">
+              {attachments.map((file, i) => (
+                <div key={i} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg bg-gray-50">
+                  <div className="flex items-center gap-2">
+                    <FileText size={16} className="text-gray-500" />
+                    <a href={file.url} target="_blank" rel="noreferrer" className="text-sm font-medium text-gray-700 hover:text-emerald-600 hover:underline">
+                      {file.name}
+                    </a>
+                  </div>
+                  <button onClick={() => removeAttachment(i)} className="text-gray-400 hover:text-red-500">
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Section 5: Assign Vendors */}
@@ -446,22 +554,28 @@ export default function CreateRFQClient({ activeVendors }: Props) {
                     <X size={16} />
                   </button>
                 </div>
-                {activeVendors.filter(v => v.companyName.toLowerCase().includes(vendorSearch.toLowerCase())).map(vendor => {
-                  const isSelected = selectedVendors.some(sv => sv.id === vendor.id);
-                  return (
-                    <div 
-                      key={vendor.id}
-                      onClick={() => toggleVendor(vendor)}
-                      className="px-4 py-2 hover:bg-gray-50 cursor-pointer flex items-center justify-between"
-                    >
-                      <div>
-                        <p className="font-medium text-gray-900 text-sm">{vendor.companyName}</p>
-                        <p className="text-xs text-gray-500">{vendor.email}</p>
+                {activeVendors.filter(v => v.companyName.toLowerCase().includes(vendorSearch.toLowerCase())).length === 0 ? (
+                  <div className="p-4 text-center text-sm text-gray-500">
+                    No vendors found
+                  </div>
+                ) : (
+                  activeVendors.filter(v => v.companyName.toLowerCase().includes(vendorSearch.toLowerCase())).map(vendor => {
+                    const isSelected = selectedVendors.some(sv => sv.id === vendor.id);
+                    return (
+                      <div 
+                        key={vendor.id}
+                        onClick={() => toggleVendor(vendor)}
+                        className="px-4 py-2 hover:bg-gray-50 cursor-pointer flex items-center justify-between"
+                      >
+                        <div>
+                          <p className="font-medium text-gray-900 text-sm">{vendor.companyName}</p>
+                          <p className="text-xs text-gray-500">{vendor.email}</p>
+                        </div>
+                        {isSelected && <Check size={16} className="text-[#0F8C58]" />}
                       </div>
-                      {isSelected && <Check size={16} className="text-[#0F8C58]" />}
-                    </div>
-                  );
-                })}
+                    );
+                  })
+                )}
               </div>
             )}
 
@@ -500,7 +614,7 @@ export default function CreateRFQClient({ activeVendors }: Props) {
             </div>
             <div>
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Reference No.</p>
-              <p className="text-sm font-medium text-gray-900">Auto generated</p>
+              <p className="text-sm font-medium text-gray-900">{initialData?.rfqNumber || 'Auto generated'}</p>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -509,7 +623,7 @@ export default function CreateRFQClient({ activeVendors }: Props) {
               </div>
               <div>
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Attachments</p>
-                <p className="text-sm font-medium text-gray-900">0</p>
+                <p className="text-sm font-medium text-gray-900">{attachments.length}</p>
               </div>
             </div>
             <div>

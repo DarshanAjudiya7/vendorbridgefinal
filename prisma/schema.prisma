@@ -27,6 +27,7 @@ enum VendorStatus {
   INACTIVE
   PENDING
   BLOCKED
+  REJECTED
 }
 
 enum RFQStatus {
